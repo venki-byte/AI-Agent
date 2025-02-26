@@ -21,8 +21,8 @@ API_KEYS = {
 
 # Email configuration
 EMAIL_CONFIG = {
-    "sender_email": "your-email@gmail.com",  # Update with your email
-    "sender_password": "your-app-password",  # Update with your app password
+    "sender_email": "venkatkrishnan145@gmail.com",  # Update with your email
+    "sender_password": "GooglePassword2222",  # Update with your app password
     "recipients": ["venkatakrishnan2222@gmail.com", "vr4653@srmist.edu.in"],
     "subject": "AI News Report - " + datetime.now().strftime('%Y-%m-%d')
 }

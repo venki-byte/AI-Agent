@@ -5,26 +5,24 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from datetime import datetime, timedelta
-from transformers import pipeline
-import tensorflow as tf
 import warnings
 from hashlib import md5
 import time
+import re
 
 # Suppress unnecessary warnings
 warnings.filterwarnings("ignore")
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-tf.get_logger().setLevel('ERROR')
 
 # Configuration for API keys
 API_KEYS = {
-    "newsapi": "18272c0386d242968a28372381bffd07"  # Ensure this is your valid NewsAPI key
+    "newsapi": "18272c0386d242968a28372381bffd07"  # Your NewsAPI key
 }
 
 # Email configuration
 EMAIL_CONFIG = {
-    "sender_email": "vr4653@srmist.edu.in",  # Update with your email
-    "sender_password": "Venkat2222#",  # Update with your app password (not your regular password)
+    "sender_email": "your-email@gmail.com",  # Update with your email
+    "sender_password": "your-app-password",  # Update with your app password
     "recipients": ["venkatakrishnan2222@gmail.com", "vr4653@srmist.edu.in"],
     "subject": "AI News Report - " + datetime.now().strftime('%Y-%m-%d')
 }
@@ -42,16 +40,16 @@ def get_hash(content):
 # Cache to prevent processing the same article multiple times
 cache = set()
 
-# Function to fetch news from the API (restricting to trusted sources)
+# Function to fetch news from the API
 def fetch_news(start_date, end_date, query="Artificial Intelligence", num_articles=10):
     url = f"https://newsapi.org/v2/everything?q={query}&from={start_date}&to={end_date}&sources={TRUSTED_SOURCES}&sortBy=publishedAt&apiKey={API_KEYS['newsapi']}&pageSize={num_articles}&language=en"
     
-    print(f"Fetching news from URL: {url}")  # Debugging print
+    print(f"Fetching news from URL: {url}")
     response = requests.get(url)
     
     if response.status_code == 200:
         articles = response.json().get("articles", [])
-        print(f"Total articles fetched: {len(articles)}")  # Debugging print
+        print(f"Total articles fetched: {len(articles)}")
         return articles
     else:
         print(f"Failed to fetch news: HTTP {response.status_code} - {response.text}")
@@ -60,24 +58,41 @@ def fetch_news(start_date, end_date, query="Artificial Intelligence", num_articl
 # Function to clean up content and remove "[+ chars]"
 def clean_content(text):
     if text:
-        text = text.split("[+")[0].strip()  # Remove everything after "[+"
+        # Remove everything after "[+"
+        text = text.split("[+")[0].strip()
+        # Replace smart quotes and other problematic Unicode characters
+        text = text.replace('"', '"').replace('"', '"')
+        text = text.replace(''', "'").replace(''', "'")
+        text = text.replace('–', '-').replace('—', '-')
+        text = text.replace('…', '...')
+        # Remove other non-Latin-1 characters
+        text = re.sub(r'[^\x00-\xFF]', '', text)
         return text
     return ""
 
-# Function to summarize text using the Hugging Face Transformers pipeline
-def summarize_text(text):
-    try:
-        summarizer = pipeline("summarization", model="t5-small")
+# Function to extract key sentences for summary (no dependency on transformers)
+def extract_summary(text, max_sentences=5):
+    if not text or len(text) < 50:
+        return "No content available for summarization."
+    
+    # Split into sentences (simple approach)
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    
+    # Remove very short sentences
+    sentences = [s for s in sentences if len(s) > 20]
+    
+    if not sentences:
+        return "Content available but could not extract meaningful sentences."
+    
+    # Take first few sentences as summary
+    summary_sentences = sentences[:min(max_sentences, len(sentences))]
+    summary = " ".join(summary_sentences)
+    
+    # Truncate if too long
+    if len(summary) > 500:
+        summary = summary[:497] + "..."
         
-        # Increase summary size even more (4x bigger)
-        max_len = min(len(text) // 2, 720)  # More detailed summary
-        min_len = max_len // 2
-
-        summary = summarizer(text, max_length=max_len, min_length=min_len, do_sample=False)
-        return summary[0]["summary_text"]
-    except Exception as e:
-        print(f"Error during summarization: {e}")
-        return None
+    return summary
 
 # Function to filter relevant AI news and remove duplicates
 def filter_ai_articles(articles):
@@ -105,33 +120,37 @@ def filter_ai_articles(articles):
         # Check if the article is unique and primarily about AI
         if content_hash not in cache and is_ai_article:
             cache.add(content_hash)
+            # Add a summary using our simple extraction method
+            article["summary"] = extract_summary(content)
             filtered_articles.append(article)
 
     return filtered_articles
 
-# Function to create and save a report of the articles as a text file
+# Function to create and save a report of the articles as a PDF
 from fpdf import FPDF
+
+class UTF8FPDF(FPDF):
+    def __init__(self):
+        super().__init__()
+        
+    def footer(self):
+        # Position at 1.5 cm from bottom
+        self.set_y(-15)
+        # Arial italic 8
+        self.set_font('Arial', 'I', 8)
+        # Page number
+        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
 
 def save_articles_as_pdf(articles):
     filtered_articles = filter_ai_articles(articles)
     pdf_filename = "news_report_new.pdf"
     
-    pdf = FPDF()
+    # Use our custom FPDF class
+    pdf = UTF8FPDF()
     pdf.add_page()
-    # Make sure to handle the font path correctly for deployment
-    # For Render, you'll need to use a relative path or install the font 
-    try:
-        # Try to use a standard font first
-        pdf.set_font('Arial', size=12)
-    except Exception:
-        try:
-            # If Arial fails, try DejaVu with absolute path
-            pdf.add_font('DejaVu', '', r'DejaVuSans.ttf', uni=True)
-            pdf.set_font('DejaVu', size=12)
-        except Exception as e:
-            # If all fails, use built-in Helvetica
-            print(f"Font error: {e}, using default font")
-            pdf.set_font('Helvetica', size=12)
+    
+    # Use the built-in font to avoid font issues
+    pdf.set_font('Arial', size=12)
 
     # Add title to the PDF
     pdf.set_font_size(16)
@@ -143,41 +162,27 @@ def save_articles_as_pdf(articles):
     if not filtered_articles:
         pdf.cell(200, 10, "No relevant AI news found.")
     else:
-        # Use link functionality for clickable URLs
         for i, article in enumerate(filtered_articles):
-            title = article["title"]
+            title = clean_content(article["title"])
             url = article["url"]
-            content = clean_content(article.get("content", ""))
+            summary = article["summary"]
 
-            if len(content) < 100:
-                content = clean_content(article.get("description", ""))
-
-            # Set a blue color for title to indicate it's a link
-            pdf.set_text_color(0, 0, 255)
+            # Article number and title
+            pdf.set_font('Arial', 'B', 12)
             pdf.cell(200, 10, f"{i+1}. {title}", ln=True)
             
-            # Add clickable link
+            # Source URL
+            pdf.set_font('Arial', '', 10)
             pdf.set_text_color(0, 0, 255)
-            # The link text
-            pdf.cell(30, 10, "Read More:", ln=0)
-            
-            # The actual link that's clickable
-            pdf.set_font('', 'U')  # Underline to indicate link
-            link_text = url if len(url) < 80 else url[:77] + "..."
-            pdf.cell(170, 10, link_text, ln=1, link=url)
-            pdf.set_font('', '')  # Remove underline
+            pdf.cell(30, 10, "Source URL:", ln=0)
+            pdf.cell(170, 10, url, ln=1)
             
             # Reset text color for summary
             pdf.set_text_color(0, 0, 0)
             
-            if content:
-                summary = summarize_text(content)
-                if summary:
-                    pdf.multi_cell(0, 10, f"Summary: {summary}")
-                else:
-                    pdf.multi_cell(0, 10, "Summary: Could not summarize")
-            else:
-                pdf.multi_cell(0, 10, "Summary: No content available")
+            # Summary
+            pdf.set_font('Arial', '', 10)
+            pdf.multi_cell(0, 10, f"Summary: {summary}")
             
             pdf.ln(5)  # Add space between articles
 

@@ -1,0 +1,5 @@
+requests==2.26.0
+transformers==4.10.0
+tensorflow==2.6.0  # Only include this if you are using TensorFlow
+torch==1.9.0  # Only include this if you are using PyTorch
+fpdf==1.7.2

@@ -97,37 +97,51 @@ def filter_ai_articles(articles):
     return filtered_articles
 
 # Function to create and save a report of the articles as a text file
-def save_articles_as_text(articles):
+from fpdf import FPDF
+
+def save_articles_as_pdf(articles):
     filtered_articles = filter_ai_articles(articles)
 
+    pdf = FPDF()
+    pdf.add_page()
+    # Ensure you have the correct path to the font file
+    pdf.add_font('DejaVu', '', r'C:\Users\Venkatakrishnan\OneDrive - Victopia Labs\News Reader\DejaVuSans.ttf', uni=True)
+    pdf.set_font('DejaVu', size=12)
+
     if not filtered_articles:
-        print("No relevant AI news found.")
-        with open("news_report.txt", "w", encoding="utf-8") as file:
-            file.write("No relevant AI news found.\n")
-        return
-    
-    with open("news_report.txt", "w", encoding="utf-8") as file:
+        pdf.cell(200, 10, "No relevant AI news found.")
+    else:
         for article in filtered_articles:
             title = article["title"]
             url = article["url"]
             content = clean_content(article.get("content", ""))
-            
-            # If content is too short, use description
+
             if len(content) < 100:
                 content = clean_content(article.get("description", ""))
 
             if content:
                 summary = summarize_text(content)
                 if summary:
-                    file.write(f"Title: {title}\nSummary: {summary}\nURL: {url}\n\n")
+                    pdf.cell(200, 10, f"Title: {title}", ln=True)
+                    pdf.cell(200, 10, f"Summary: {summary}", ln=True)
+                    pdf.cell(200, 10, f"URL: {url}", ln=True)
+                    pdf.cell(200, 10, "", ln=True)  # Add an empty line
                 else:
-                    file.write(f"Title: {title}\nSummary: Could not summarize\nURL: {url}\n\n")
+                    pdf.cell(200, 10, f"Title: {title}", ln=True)
+                    pdf.cell(200, 10, "Summary: Could not summarize", ln=True)
+                    pdf.cell(200, 10, f"URL: {url}", ln=True)
+                    pdf.cell(200, 10, "", ln=True)
             else:
-                file.write(f"Title: {title}\nSummary: No content available\nURL: {url}\n\n")
-    
-    print("Filtered AI news report saved successfully in 'news_report.txt'.")
+                pdf.cell(200, 10, f"Title: {title}", ln=True)
+                pdf.cell(200, 10, "Summary: No content available", ln=True)
+                pdf.cell(200, 10, f"URL: {url}", ln=True)
+                pdf.cell(200, 10, "", ln=True)
 
-# Main function to orchestrate the fetching and processing of news
+    pdf.output("news_report_new.pdf")
+
+
+
+# Update the main function call to use the new PDF saving function
 def main():
     today = datetime.now().strftime('%Y-%m-%d')
     last_week = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
@@ -135,7 +149,7 @@ def main():
     articles = fetch_news(start_date=last_week, end_date=today, query="Artificial Intelligence OR AI OR Machine Learning OR ML OR Deep Learning OR NLP OR Generative AI", num_articles=20)
     
     if articles:
-        save_articles_as_text(articles)
+        save_articles_as_pdf(articles)
     else:
         print("No articles fetched or processed.")
 
